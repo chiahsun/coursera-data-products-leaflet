@@ -1,0 +1,77 @@
+---
+title: "DataProductsLeafletDemo"
+author: "Chia-Hsun Cheng"
+date: "6/4/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(cache = TRUE)
+```
+
+## Get Covid19 Data From Johns Hopkins API
+
+Last retrieved: `r Sys.time()`
+
+
+```{r}
+# https://cran.r-project.org/web/packages/httr/vignettes/quickstart.html
+library(httr)
+# https://documenter.getpostman.com/view/8854915/SzS7R6uu?version=latest#84845016-70ae-4a1f-8e7a-d4b9a0289050
+r <- GET("https://corona.lmao.ninja/v2/jhucsse")
+textContent <- content(r, "text")
+library(rjson)
+jsonData <- fromJSON(textContent)
+```
+
+```{r}
+library(dplyr)
+df <- NULL
+for (i in 1:length(jsonData)) {
+  df = bind_rows(df, c(latitude = jsonData[[i]]$coordinates$latitude,
+                       longitude = jsonData[[i]]$coordinates$longitude,
+                       country = jsonData[[i]]$country,
+                       province = jsonData[[i]]$province,
+                       confirmed = jsonData[[i]]$stats$confirmed,
+                       deaths = jsonData[[i]]$stats$deaths
+                       ))
+}
+df$latitude = as.numeric(df$latitude)
+df$longitude = as.numeric(df$longitude)
+df$confirmed = as.numeric(df$confirmed)
+df$deaths = as.numeric(df$deaths)
+df <- df %>%
+      filter(!is.na(longitude))
+```
+
+```{r}
+df$col <- sqrt(df$deaths/df$confirmed)
+# head(arrange(df, desc(col)))
+
+library(leaflet)
+# https://rstudio.github.io/leaflet/colors.html
+pal <- colorNumeric(
+  palette = colorRamp(c("#FFCCCC", "#FF0000"), interpolate="linear"),
+  domain = df$col)
+```
+
+## Covid19 Map
+
+```{r}
+library(leaflet)
+# https://rstudio.github.io/leaflet/map_widget.html
+covid19Map <- leaflet(df) %>%
+            addTiles() %>%
+            addCircles(lat = ~ latitude, 
+                       lng = ~ longitude, 
+                       radius = ~sqrt(confirmed)*300, 
+                       weight = 1, 
+                       color = ~pal(col),
+                       fillOpacity = 0.6
+                       )
+covid19Map
+```
+
+* The radius of the circle maps to the number of confirmed cases
+* The color of the circle maps to the deaths rate among confirmed(higher the rate, more red for the circle)
